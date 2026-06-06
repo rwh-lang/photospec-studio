@@ -1244,7 +1244,14 @@ async function renderSvgPng() {
   const width = Math.round(rect.width);
   const height = Math.round(rect.height);
   const svg = await buildPreviewSvg(width, height);
-  const image = await loadImage(`data:image/svg+xml;base64,${base64Encode(svg)}`);
+  let image;
+  try {
+    image = await loadSvgImage(svg);
+  } catch (svgError) {
+    console.warn("SVG読み込みに失敗したため、代替Canvas出力を試みます。", svgError);
+    const fallbackCanvas = await renderCanvas();
+    return canvasToBlob(fallbackCanvas);
+  }
 
   const exportSize = exportSizes[state.selectedSize];
   const deviceRatio = Math.max(window.devicePixelRatio || 1, 1);
@@ -1265,8 +1272,34 @@ async function renderSvgPng() {
   const ctx = canvas.getContext("2d");
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  try {
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  } catch (drawError) {
+    console.warn("SVGをcanvasに描画できませんでした。フォールバックを使用します。", drawError);
+    const fallbackCanvas = await renderCanvas();
+    return canvasToBlob(fallbackCanvas);
+  }
 
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("PNGの生成に失敗しました。"));
+    }, "image/png");
+  });
+}
+
+async function loadSvgImage(svg) {
+  const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(svgBlob);
+  try {
+    const image = await loadImage(url);
+    return image;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function canvasToBlob(canvas) {
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
