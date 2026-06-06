@@ -1242,14 +1242,21 @@ async function renderPreviewBlob() {
 
   const rect = target.getBoundingClientRect();
   const exportSize = exportSizes[state.selectedSize];
+  const previewWidth = Math.round(rect.width);
+  const previewHeight = Math.round(rect.height);
+  const image = state.imageElement;
   let scale = Math.max(1, window.devicePixelRatio || 1);
 
   if (exportSize.width && exportSize.height) {
-    const widthScale = exportSize.width / rect.width;
-    const heightScale = exportSize.height / rect.height;
-    scale = Math.min(4, Math.max(1, Math.min(widthScale, heightScale)));
+    const widthScale = exportSize.width / previewWidth;
+    const heightScale = exportSize.height / previewHeight;
+    scale = Math.min(8, Math.max(scale, Math.min(widthScale, heightScale)));
+  } else if (image) {
+    const naturalWidthScale = image.naturalWidth / previewWidth;
+    const naturalHeightScale = image.naturalHeight / previewHeight;
+    scale = Math.min(8, Math.max(scale, naturalWidthScale, naturalHeightScale, 3));
   } else {
-    scale = Math.min(4, Math.max(scale, 2));
+    scale = Math.min(8, Math.max(scale, 3));
   }
 
   if (typeof html2canvas !== "function") {
@@ -1259,10 +1266,11 @@ async function renderPreviewBlob() {
   const canvas = await html2canvas(target, {
     backgroundColor: null,
     scale,
-    width: Math.round(rect.width),
-    height: Math.round(rect.height),
+    width: previewWidth,
+    height: previewHeight,
     useCORS: true,
     imageTimeout: 15000,
+    foreignObjectRendering: true,
   });
 
   return new Promise((resolve, reject) => {
