@@ -241,6 +241,9 @@ button {
 .preview-panel {
   padding: 16px;
   min-width: 0;
+  position: sticky;
+  top: 16px;
+  z-index: 8;
 }
 
 .preview-toolbar,
@@ -1353,6 +1356,13 @@ button:disabled {
     padding: 12px;
   }
 
+  .preview-panel {
+    top: 0;
+    z-index: 20;
+    border-left: 0;
+    border-right: 0;
+  }
+
   .preview-toolbar {
     align-items: flex-start;
   }
@@ -1420,6 +1430,10 @@ button:disabled {
   .clean-canvas,
   .glass-canvas {
     min-height: 0;
+  }
+
+  .design-preview {
+    width: min(100%, calc(36vh * var(--preview-ratio)));
   }
 
   .paper-canvas.soft,

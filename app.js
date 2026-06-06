@@ -1491,15 +1491,17 @@ function drawPolaroid(ctx, image, x, y, width, height, title) {
 
 function drawSpecColumn(ctx, x, y, maxWidth, color = "#111", size = 18) {
   const lines = [makerText(), shortCameraText(), lensShort(), state.data.focalLength, state.data.fNumber, state.data.shutterSpeed, state.data.iso].filter(Boolean);
+  const lineHeight = scaledTextSize(ctx, size) * 1.55;
   lines.forEach((line, index) => {
-    drawSmallText(ctx, line, x, y + index * size * 1.55, color, size, index < 2 ? 800 : 500);
+    drawSmallText(ctx, line, x, y + index * lineHeight, color, size, index < 2 ? 800 : 500);
   });
 }
 
 function drawRightSpec(ctx, x, y, color) {
   ctx.textAlign = "right";
+  const lineHeight = scaledTextSize(ctx, 18) * 1.55;
   [makerText(), shortCameraText(), settingsLine()].forEach((line, index) => {
-    drawSmallText(ctx, line, x, y + index * 26, color, index === 0 ? 19 : 17, index === 0 ? 800 : 500, "Helvetica", "right");
+    drawSmallText(ctx, line, x, y + index * lineHeight, color, index === 0 ? 19 : 17, index === 0 ? 800 : 500, "Helvetica", "right");
   });
   ctx.textAlign = "left";
 }
@@ -1514,7 +1516,7 @@ function drawRotatedSpec(ctx, x, y, color) {
 
 function drawCenteredCaption(ctx, x, y, color) {
   drawSmallText(ctx, cameraText(), x, y, color, 22, 800, "Helvetica", "center");
-  drawSmallText(ctx, `${lensText()}  ${settingsLine()}`, x, y + 28, color, 16, 500, "Helvetica", "center");
+  drawSmallText(ctx, `${lensText()}  ${settingsLine()}`, x, y + scaledTextSize(ctx, 16) * 1.75, color, 16, 500, "Helvetica", "center");
 }
 
 function drawSmallText(ctx, text, x, y, color, size, weight = 500, family = "Helvetica", align = "left") {
@@ -1523,27 +1525,38 @@ function drawSmallText(ctx, text, x, y, color, size, weight = 500, family = "Hel
   state.canvasTextIndex = (state.canvasTextIndex || 0) + 1;
   const layer = state.layerControls[layerId] || { textX: state.controls.textX, textY: state.controls.textY, textScale: state.controls.textScale };
   ctx.fillStyle = color;
-  ctx.font = `${weight} ${size * layer.textScale}px ${family}, Arial, sans-serif`;
+  ctx.font = `${weight} ${scaledTextSize(ctx, size) * layer.textScale}px ${family}, Arial, sans-serif`;
   ctx.textAlign = align;
   ctx.textBaseline = "alphabetic";
   ctx.fillText(String(text || "-"), x + ctx.canvas.width * (layer.textX / 100), y + ctx.canvas.height * (layer.textY / 100));
   ctx.restore();
 }
 
+function scaledTextSize(ctx, size) {
+  return size * canvasTextScale(ctx, size);
+}
+
+function canvasTextScale(ctx, size) {
+  if (size >= 90) return 1;
+  const shortEdge = Math.min(ctx.canvas.width, ctx.canvas.height);
+  return clamp(shortEdge / 900, 1, 5);
+}
+
 function drawCustomTextsCanvas(ctx, width, height) {
   state.customTexts.forEach((item) => {
     const layer = state.layerControls[item.id] || { textX: 0, textY: 0, textScale: 1 };
+    const fontSize = Math.max(24, width * 0.035) * layer.textScale;
     ctx.save();
     ctx.fillStyle = "#ffffff";
     ctx.shadowColor = "rgba(0,0,0,0.65)";
-    ctx.shadowBlur = 14;
-    ctx.font = `${700 * 1} ${Math.max(24, width * 0.035) * layer.textScale}px Helvetica, Arial, sans-serif`;
+    ctx.shadowBlur = Math.max(14, fontSize * 0.28);
+    ctx.font = `700 ${fontSize}px Helvetica, Arial, sans-serif`;
     ctx.textAlign = "center";
     const x = width * (0.5 + layer.textX / 100);
     const y = height * (0.5 + layer.textY / 100);
     if (item.vertical) {
       const chars = [...item.text];
-      const lineHeight = Math.max(24, width * 0.035) * layer.textScale * 1.12;
+      const lineHeight = fontSize * 1.12;
       chars.forEach((char, index) => ctx.fillText(char, x, y + index * lineHeight));
     } else {
       ctx.fillText(item.text, x, y);
