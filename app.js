@@ -1203,8 +1203,7 @@ async function downloadPng() {
   }
   setExportStatus("PNGを書き出しています...");
   try {
-    const canvas = await renderCanvas();
-    const blob = await canvasToBlob(canvas);
+    const blob = await renderPreviewBlob();
     const file = new File([blob], `photospec-${state.selectedPreset}.png`, { type: "image/png" });
     if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
       try {
@@ -1237,7 +1236,35 @@ async function downloadPng() {
   }
 }
 
-function canvasToBlob(canvas) {
+async function renderPreviewBlob() {
+  const target = app.querySelector(".design-stage");
+  if (!target) throw new Error("プレビュー要素が見つかりません。");
+
+  const rect = target.getBoundingClientRect();
+  const exportSize = exportSizes[state.selectedSize];
+  let scale = Math.max(1, window.devicePixelRatio || 1);
+
+  if (exportSize.width && exportSize.height) {
+    const widthScale = exportSize.width / rect.width;
+    const heightScale = exportSize.height / rect.height;
+    scale = Math.min(4, Math.max(1, Math.min(widthScale, heightScale)));
+  } else {
+    scale = Math.min(4, Math.max(scale, 2));
+  }
+
+  if (typeof html2canvas !== "function") {
+    throw new Error("html2canvas が読み込まれていません。index.html にスクリプトを追加してください。");
+  }
+
+  const canvas = await html2canvas(target, {
+    backgroundColor: null,
+    scale,
+    width: Math.round(rect.width),
+    height: Math.round(rect.height),
+    useCORS: true,
+    imageTimeout: 15000,
+  });
+
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
