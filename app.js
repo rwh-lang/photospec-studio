@@ -1203,7 +1203,7 @@ async function downloadPng() {
   }
   setExportStatus("PNGを書き出しています...");
   try {
-    const blob = await renderPreviewBlob();
+    const blob = await renderSvgPng();
     const file = new File([blob], `photospec-${state.selectedPreset}.png`, { type: "image/png" });
     if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
       try {
@@ -1236,42 +1236,36 @@ async function downloadPng() {
   }
 }
 
-async function renderPreviewBlob() {
+async function renderSvgPng() {
   const target = app.querySelector(".design-stage");
   if (!target) throw new Error("プレビュー要素が見つかりません。");
 
   const rect = target.getBoundingClientRect();
+  const width = Math.round(rect.width);
+  const height = Math.round(rect.height);
+  const svg = await buildPreviewSvg(width, height);
+  const image = await loadImage(`data:image/svg+xml;base64,${base64Encode(svg)}`);
+
   const exportSize = exportSizes[state.selectedSize];
-  const previewWidth = Math.round(rect.width);
-  const previewHeight = Math.round(rect.height);
-  const image = state.imageElement;
-  let scale = Math.max(1, window.devicePixelRatio || 1);
-
+  const deviceRatio = Math.max(window.devicePixelRatio || 1, 1);
+  let scale = Math.min(4, Math.max(2, deviceRatio));
   if (exportSize.width && exportSize.height) {
-    const widthScale = exportSize.width / previewWidth;
-    const heightScale = exportSize.height / previewHeight;
-    scale = Math.min(8, Math.max(scale, Math.min(widthScale, heightScale)));
-  } else if (image) {
-    const naturalWidthScale = image.naturalWidth / previewWidth;
-    const naturalHeightScale = image.naturalHeight / previewHeight;
-    scale = Math.min(8, Math.max(scale, naturalWidthScale, naturalHeightScale, 3));
-  } else {
-    scale = Math.min(8, Math.max(scale, 3));
+    const widthScale = exportSize.width / width;
+    const heightScale = exportSize.height / height;
+    scale = Math.min(4, Math.max(scale, Math.min(widthScale, heightScale)));
+  } else if (state.imageElement) {
+    const naturalWidthScale = state.imageElement.naturalWidth / width;
+    const naturalHeightScale = state.imageElement.naturalHeight / height;
+    scale = Math.min(4, Math.max(scale, naturalWidthScale, naturalHeightScale));
   }
 
-  if (typeof html2canvas !== "function") {
-    throw new Error("html2canvas が読み込まれていません。index.html にスクリプトを追加してください。");
-  }
-
-  const canvas = await html2canvas(target, {
-    backgroundColor: null,
-    scale,
-    width: previewWidth,
-    height: previewHeight,
-    useCORS: true,
-    imageTimeout: 15000,
-    foreignObjectRendering: true,
-  });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(width * scale);
+  canvas.height = Math.round(height * scale);
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
 
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -1279,6 +1273,76 @@ async function renderPreviewBlob() {
       else reject(new Error("PNGの生成に失敗しました。"));
     }, "image/png");
   });
+}
+
+function getAllStyles() {
+  let cssText = "";
+  for (const sheet of document.styleSheets) {
+    try {
+      if (!sheet.cssRules) continue;
+      for (const rule of sheet.cssRules) {
+        cssText += rule.cssText;
+      }
+    } catch (error) {
+      // Ignore inaccessible style sheets.
+    }
+  }
+  return cssText;
+}
+
+async function inlinePreviewImages(target) {
+  const images = [...target.querySelectorAll("img")];
+  await Promise.all(images.map(async (img) => {
+    if (!img.src || img.src.startsWith("data:")) return;
+    try {
+      img.src = await imageUrlToDataUrl(img.src);
+    } catch (error) {
+      console.warn("画像の埋め込みに失敗しました。", error);
+    }
+  }));
+}
+
+function imageUrlToDataUrl(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      try {
+        resolve(canvas.toDataURL("image/png"));
+      } catch (error) {
+        reject(error);
+      }
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+function base64Encode(value) {
+  return btoa(unescape(encodeURIComponent(value)));
+}
+
+async function buildPreviewSvg(width, height) {
+  const target = app.querySelector(".design-stage");
+  if (!target) throw new Error("プレビュー要素が見つかりません。");
+
+  const clone = target.cloneNode(true);
+  await inlinePreviewImages(clone);
+  const cssText = getAllStyles().replace(/<\/style>/gi, "<\\/style>");
+  const xhtml = `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${width}px;height:${height}px;margin:0;padding:0;">` +
+    `<style>${cssText}</style>` +
+    clone.outerHTML +
+    `</div>`;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">` +
+    `<foreignObject width="100%" height="100%">${xhtml}</foreignObject>` +
+    `</svg>`;
 }
 
 function setExportStatus(message) {
